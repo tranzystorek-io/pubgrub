@@ -17,10 +17,8 @@
 use std::cmp::Ordering;
 use std::fmt;
 
-use crate::version::Version;
-
 pub trait RangeSet: fmt::Debug + fmt::Display + Clone + Eq {
-    type VERSION: Version;
+    type VERSION: Clone + Ord + fmt::Debug + fmt::Display;
 
     /// The empty set.
     fn none() -> Self;
@@ -53,13 +51,13 @@ pub trait RangeSet: fmt::Debug + fmt::Display + Clone + Eq {
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
-pub struct Range<V: Version> {
+pub struct Range<V: crate::version::RangeVersion> {
     segments: Vec<Interval<V>>,
 }
 
 type Interval<V> = (V, Option<V>);
 
-impl<V: Version> RangeSet for Range<V> {
+impl<V: crate::version::RangeVersion> RangeSet for Range<V> {
     type VERSION = V;
 
     /// Empty set of versions.
@@ -139,7 +137,7 @@ impl<V: Version> RangeSet for Range<V> {
 }
 
 // Range building blocks.
-impl<V: Version> Range<V> {
+impl<V: crate::version::RangeVersion> Range<V> {
     /// Set of all possible versions.
     pub fn any() -> Self {
         Self::higher_than(V::lowest())
@@ -181,7 +179,7 @@ impl<V: Version> Range<V> {
 }
 
 // Set operations.
-impl<V: Version> Range<V> {
+impl<V: crate::version::RangeVersion> Range<V> {
     // Negate ##################################################################
 
     /// Compute the complement set of versions.
@@ -316,7 +314,7 @@ impl<V: Version> Range<V> {
 }
 
 // Other useful functions.
-impl<V: Version> Range<V> {
+impl<V: crate::version::RangeVersion> Range<V> {
     /// Return the lowest version in the range (if there is one).
     pub fn lowest_version(&self) -> Option<V> {
         self.segments
@@ -329,7 +327,7 @@ impl<V: Version> Range<V> {
 
 // REPORT ######################################################################
 
-impl<V: Version> fmt::Display for Range<V> {
+impl<V: crate::version::RangeVersion> fmt::Display for Range<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.segments.as_slice() {
             [] => write!(f, "∅"),
@@ -349,7 +347,7 @@ impl<V: Version> fmt::Display for Range<V> {
     }
 }
 
-fn interval_to_string<V: Version>(interval: &Interval<V>) -> String {
+fn interval_to_string<V: crate::version::RangeVersion>(interval: &Interval<V>) -> String {
     match interval {
         (start, Some(end)) => format!("[ {}, {} [", start, end),
         (start, None) => format!("[ {}, ∞ [", start),

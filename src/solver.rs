@@ -371,9 +371,7 @@ impl<P: Package, R: RangeSet> OfflineDependencyProvider<P, R> {
 /// contains all dependency information available in memory.
 /// Packages are picked with the fewest versions contained in the constraints first.
 /// Versions are picked with the newest versions first.
-impl<P: Package, R: RangeSet> DependencyProvider<P, R>
-    for OfflineDependencyProvider<P, R>
-{
+impl<P: Package, R: RangeSet> DependencyProvider<P, R> for OfflineDependencyProvider<P, R> {
     fn choose_package_version<T: Borrow<P>, U: Borrow<R>>(
         &self,
         potential_packages: impl Iterator<Item = (T, U)>,

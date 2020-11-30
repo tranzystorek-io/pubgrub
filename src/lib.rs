@@ -156,10 +156,10 @@
 //! # use pubgrub::version::Version;
 //! # use pubgrub::report::DerivationTree;
 //! #
-//! pub trait Reporter<P: Package, V: Version> {
+//! pub trait Reporter<P: Package, R: RangeSet> {
 //!     type Output;
 //!
-//!     fn report(derivation_tree: &DerivationTree<P, V>) -> Self::Output;
+//!     fn report(derivation_tree: &DerivationTree<P, R>) -> Self::Output;
 //! }
 //! ```
 //! Implementing a [Reporter](crate::report::Reporter) may involve a lot of heuristics

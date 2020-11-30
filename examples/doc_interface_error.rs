@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use pubgrub::error::PubGrubError;
-use pubgrub::range::Range;
+use pubgrub::range::{Range, RangeSet};
+
 use pubgrub::report::{DefaultStringReporter, Reporter};
 use pubgrub::solver::{resolve, OfflineDependencyProvider};
 use pubgrub::version::SemanticVersion;
@@ -15,7 +16,7 @@ use pubgrub::version::SemanticVersion;
 // `intl` has no dependency
 #[rustfmt::skip]
 fn main() {
-    let mut dependency_provider = OfflineDependencyProvider::<&str, SemanticVersion>::new();
+    let mut dependency_provider = OfflineDependencyProvider::<&str, Range<SemanticVersion>>::new();
     // Direct dependencies: menu and icons.
     dependency_provider.add_dependencies("root", (1, 0, 0), vec![
         ("menu", Range::any()),

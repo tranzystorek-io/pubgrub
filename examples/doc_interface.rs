@@ -10,7 +10,7 @@ use pubgrub::version::NumberVersion;
 // `icons` has no dependency
 #[rustfmt::skip]
 fn main() {
-    let mut dependency_provider = OfflineDependencyProvider::<&str, NumberVersion>::new();
+    let mut dependency_provider = OfflineDependencyProvider::<&str, Range<NumberVersion>>::new();
     dependency_provider.add_dependencies(
         "root", 1, vec![("menu", Range::any()), ("icons", Range::any())],
     );

@@ -2,7 +2,6 @@
 
 use std::{collections::BTreeSet as Set, error::Error};
 
-use pubgrub::error::PubGrubError;
 use pubgrub::package::Package;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, Reporter};
@@ -10,7 +9,8 @@ use pubgrub::solver::{
     choose_package_with_fewest_versions, resolve, Dependencies, DependencyProvider,
     OfflineDependencyProvider,
 };
-use pubgrub::version::{NumberVersion, Version};
+use pubgrub::version::NumberVersion;
+use pubgrub::{error::PubGrubError, range::RangeSet};
 
 use proptest::collection::{btree_map, vec};
 use proptest::prelude::*;
@@ -24,20 +24,24 @@ mod sat_dependency_provider;
 /// The same as [OfflineDependencyProvider] but takes versions from the opposite end:
 /// if [OfflineDependencyProvider] returns versions from newest to oldest, this returns them from oldest to newest.
 #[derive(Clone)]
-struct OldestVersionsDependencyProvider<P: Package, V: Version>(OfflineDependencyProvider<P, V>);
+struct OldestVersionsDependencyProvider<P: Package, R: RangeSet>(OfflineDependencyProvider<P, R>);
 
-impl<P: Package, V: Version> DependencyProvider<P, V> for OldestVersionsDependencyProvider<P, V> {
-    fn choose_package_version<T: std::borrow::Borrow<P>, U: std::borrow::Borrow<Range<V>>>(
+impl<P: Package, R: RangeSet> DependencyProvider<P, R> for OldestVersionsDependencyProvider<P, R> {
+    fn choose_package_version<T: std::borrow::Borrow<P>, U: std::borrow::Borrow<R>>(
         &self,
         potential_packages: impl Iterator<Item = (T, U)>,
-    ) -> Result<(T, Option<V>), Box<dyn Error>> {
+    ) -> Result<(T, Option<R::VERSION>), Box<dyn Error>> {
         Ok(choose_package_with_fewest_versions(
             |p| self.0.versions(p).into_iter().flatten().cloned(),
             potential_packages,
         ))
     }
 
-    fn get_dependencies(&self, p: &P, v: &V) -> Result<Dependencies<P, V>, Box<dyn Error>> {
+    fn get_dependencies(
+        &self,
+        p: &P,
+        v: &R::VERSION,
+    ) -> Result<Dependencies<P, R>, Box<dyn Error>> {
         self.0.get_dependencies(p, v)
     }
 }
@@ -62,17 +66,21 @@ impl<DP> TimeoutDependencyProvider<DP> {
     }
 }
 
-impl<P: Package, V: Version, DP: DependencyProvider<P, V>> DependencyProvider<P, V>
+impl<P: Package, R: RangeSet, DP: DependencyProvider<P, R>> DependencyProvider<P, R>
     for TimeoutDependencyProvider<DP>
 {
-    fn choose_package_version<T: std::borrow::Borrow<P>, U: std::borrow::Borrow<Range<V>>>(
+    fn choose_package_version<T: std::borrow::Borrow<P>, U: std::borrow::Borrow<R>>(
         &self,
         potential_packages: impl Iterator<Item = (T, U)>,
-    ) -> Result<(T, Option<V>), Box<dyn Error>> {
+    ) -> Result<(T, Option<R::VERSION>), Box<dyn Error>> {
         self.dp.choose_package_version(potential_packages)
     }
 
-    fn get_dependencies(&self, p: &P, v: &V) -> Result<Dependencies<P, V>, Box<dyn Error>> {
+    fn get_dependencies(
+        &self,
+        p: &P,
+        v: &R::VERSION,
+    ) -> Result<Dependencies<P, R>, Box<dyn Error>> {
         self.dp.get_dependencies(p, v)
     }
 
@@ -88,7 +96,7 @@ impl<P: Package, V: Version, DP: DependencyProvider<P, V>> DependencyProvider<P,
 #[test]
 #[should_panic]
 fn should_cancel_can_panic() {
-    let mut dependency_provider = OfflineDependencyProvider::<_, NumberVersion>::new();
+    let mut dependency_provider = OfflineDependencyProvider::<_, Range<NumberVersion>>::new();
     dependency_provider.add_dependencies(0, 0, vec![(666, Range::any())]);
 
     // Run the algorithm.
@@ -118,7 +126,7 @@ pub fn registry_strategy<N: Package + Ord>(
     bad_name: N,
 ) -> impl Strategy<
     Value = (
-        OfflineDependencyProvider<N, NumberVersion>,
+        OfflineDependencyProvider<N, Range<NumberVersion>>,
         Vec<(N, NumberVersion)>,
     ),
 > {
@@ -210,7 +218,8 @@ pub fn registry_strategy<N: Package + Ord>(
                     }
                 }
 
-                let mut dependency_provider = OfflineDependencyProvider::<N, NumberVersion>::new();
+                let mut dependency_provider =
+                    OfflineDependencyProvider::<N, Range<NumberVersion>>::new();
 
                 let complicated_len = std::cmp::min(complicated_len, list_of_pkgid.len());
                 let complicated: Vec<_> = if reverse_alphabetical {
@@ -432,7 +441,7 @@ proptest! {
                 Ok(used) => {
                     // If resolution was successful, then unpublishing a version of a crate
                     // that was not selected should not change that.
-                    let mut smaller_dependency_provider = OfflineDependencyProvider::<_, NumberVersion>::new();
+                    let mut smaller_dependency_provider = OfflineDependencyProvider::<_, Range<NumberVersion>>::new();
                     for &(n, v) in &all_versions {
                         if used.get(&n) == Some(&v) // it was used
                            || to_remove.get(&(n, v)).is_none() // or it is not one to be removed
@@ -455,7 +464,7 @@ proptest! {
                 Err(_) => {
                     // If resolution was unsuccessful, then it should stay unsuccessful
                     // even if any version of a crate is unpublished.
-                    let mut smaller_dependency_provider = OfflineDependencyProvider::<_, NumberVersion>::new();
+                    let mut smaller_dependency_provider = OfflineDependencyProvider::<_, Range<NumberVersion>>::new();
                     for &(n, v) in &all_versions {
                         if to_remove.get(&(n, v)).is_none() // it is not one to be removed
                         {

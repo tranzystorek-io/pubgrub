@@ -5,32 +5,31 @@
 
 use crate::internal::assignment::Assignment::{self, Decision, Derivation};
 use crate::package::Package;
-use crate::range::Range;
+use crate::range::RangeSet;
 use crate::term::Term;
 use crate::type_aliases::{Map, SelectedDependencies};
-use crate::version::Version;
 
 /// A memory is the set of all assignments in the partial solution,
 /// organized by package instead of historically ordered.
 ///
 /// Contrary to PartialSolution, Memory does not store derivations causes, only the terms.
 #[derive(Clone)]
-pub struct Memory<P: Package, V: Version> {
-    assignments: Map<P, PackageAssignments<V>>,
+pub struct Memory<P: Package, R: RangeSet> {
+    assignments: Map<P, PackageAssignments<R>>,
 }
 
 /// A package memory contains the potential decision and derivations
 /// that have already been made for a given package.
 #[derive(Clone)]
-enum PackageAssignments<V: Version> {
-    Decision((V, Term<V>)),
+enum PackageAssignments<R: RangeSet> {
+    Decision((R::VERSION, Term<R>)),
     Derivations {
-        intersected: Term<V>,
-        not_intersected_yet: Vec<Term<V>>,
+        intersected: Term<R>,
+        not_intersected_yet: Vec<Term<R>>,
     },
 }
 
-impl<P: Package, V: Version> Memory<P, V> {
+impl<P: Package, R: RangeSet> Memory<P, R> {
     /// Initialize an empty memory.
     pub fn empty() -> Self {
         Self {
@@ -39,14 +38,14 @@ impl<P: Package, V: Version> Memory<P, V> {
     }
 
     /// Retrieve intersection of terms in memory related to package.
-    pub fn term_intersection_for_package(&mut self, package: &P) -> Option<&Term<V>> {
+    pub fn term_intersection_for_package(&mut self, package: &P) -> Option<&Term<R>> {
         self.assignments
             .get_mut(package)
             .map(|pa| pa.assignment_intersection())
     }
 
     /// Building step of a Memory from a given assignment.
-    pub fn add_assignment(&mut self, assignment: &Assignment<P, V>) {
+    pub fn add_assignment(&mut self, assignment: &Assignment<P, R>) {
         match assignment {
             Decision { package, version } => self.add_decision(package.clone(), version.clone()),
             Derivation { package, cause } => {
@@ -56,7 +55,7 @@ impl<P: Package, V: Version> Memory<P, V> {
     }
 
     /// Add a decision to a Memory.
-    fn add_decision(&mut self, package: P, version: V) {
+    fn add_decision(&mut self, package: P, version: R::VERSION) {
         // Check that add_decision is never used in the wrong context.
         if cfg!(debug_assertions) {
             match self.assignments.get_mut(&package) {
@@ -75,7 +74,7 @@ impl<P: Package, V: Version> Memory<P, V> {
     }
 
     /// Add a derivation to a Memory.
-    fn add_derivation(&mut self, package: P, term: Term<V>) {
+    fn add_derivation(&mut self, package: P, term: Term<R>) {
         use std::collections::hash_map::Entry;
         match self.assignments.entry(package) {
             Entry::Occupied(mut o) => match o.get_mut() {
@@ -103,7 +102,7 @@ impl<P: Package, V: Version> Memory<P, V> {
     /// selected version (no "decision")
     /// and if it contains at least one positive derivation term
     /// in the partial solution.
-    pub fn potential_packages(&mut self) -> impl Iterator<Item = (&P, &Range<V>)> {
+    pub fn potential_packages(&mut self) -> impl Iterator<Item = (&P, &R)> {
         self.assignments
             .iter_mut()
             .filter_map(|(p, pa)| pa.potential_package_filter(p))
@@ -112,7 +111,7 @@ impl<P: Package, V: Version> Memory<P, V> {
     /// If a partial solution has, for every positive derivation,
     /// a corresponding decision that satisfies that assignment,
     /// it's a total solution and version solving has succeeded.
-    pub fn extract_solution(&self) -> Option<SelectedDependencies<P, V>> {
+    pub fn extract_solution(&self) -> Option<SelectedDependencies<P, R::VERSION>> {
         let mut solution = Map::default();
         for (p, pa) in &self.assignments {
             match pa {
@@ -135,10 +134,10 @@ impl<P: Package, V: Version> Memory<P, V> {
     }
 }
 
-impl<V: Version> PackageAssignments<V> {
+impl<R: RangeSet> PackageAssignments<R> {
     /// Returns intersection of all assignments (decision included).
     /// Mutates itself to store the intersection result.
-    fn assignment_intersection(&mut self) -> &Term<V> {
+    fn assignment_intersection(&mut self) -> &Term<R> {
         match self {
             PackageAssignments::Decision((_, term)) => term,
             PackageAssignments::Derivations {
@@ -161,7 +160,7 @@ impl<V: Version> PackageAssignments<V> {
     fn potential_package_filter<'a, P: Package>(
         &'a mut self,
         package: &'a P,
-    ) -> Option<(&'a P, &'a Range<V>)> {
+    ) -> Option<(&'a P, &'a R)> {
         match self {
             PackageAssignments::Decision(_) => None,
             PackageAssignments::Derivations {

@@ -19,6 +19,36 @@ use std::fmt;
 
 use crate::version::Version;
 
+pub trait RangeSet: fmt::Debug + fmt::Display + Clone + Eq {
+    type VERSION: Version;
+
+    /// The empty set.
+    fn none() -> Self;
+
+    /// Set of all possible versions.
+    fn any() -> Self;
+
+    /// Set containing exactly one version.
+    fn exact(v: impl Into<Self::VERSION>) -> Self;
+
+    /// Compute the complement set of versions.
+    fn negate(&self) -> Self;
+
+    /// Compute the intersection of two sets of versions.
+    fn intersection(&self, other: &Self) -> Self;
+
+    /// Check if a range contains a given version.
+    fn contains(&self, version: &Self::VERSION) -> bool {
+        let exact = Self::exact(version.clone());
+        self.intersection(&exact) == exact
+    }
+
+    /// Compute the union of two sets of versions.
+    fn union(&self, other: &Self) -> Self {
+        (self.negate().intersection(&other.negate())).negate()
+    }
+}
+
 /// A Range is a set of versions.
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -29,26 +59,90 @@ pub struct Range<V: Version> {
 
 type Interval<V> = (V, Option<V>);
 
-// Range building blocks.
-impl<V: Version> Range<V> {
+impl<V: Version> RangeSet for Range<V> {
+    type VERSION = V;
+
     /// Empty set of versions.
-    pub fn none() -> Self {
+    fn none() -> Self {
         Self {
             segments: Vec::new(),
         }
     }
 
     /// Set of all possible versions.
-    pub fn any() -> Self {
+    fn any() -> Self {
         Self::higher_than(V::lowest())
     }
 
-    /// Set containing exactly one version.
-    pub fn exact(v: impl Into<V>) -> Self {
+    /// Set of all possible versions.
+    fn exact(v: impl Into<V>) -> Self {
         let v = v.into();
         Self {
             segments: vec![(v.clone(), Some(v.bump()))],
         }
+    }
+
+    /// Check if a range contains a given version.
+    fn contains(&self, version: &V) -> bool {
+        for (v1, some_v2) in self.segments.iter() {
+            match some_v2 {
+                None => return v1 <= version,
+                Some(v2) => {
+                    if version < v1 {
+                        return false;
+                    } else if version < v2 {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Compute the complement set of versions.
+    fn negate(&self) -> Self {
+        match self.segments.as_slice().first() {
+            None => Self::any(), // Complement of ∅  is *
+
+            // First high bound is +∞
+            Some((v, None)) => {
+                // Complement of * is ∅
+                if v == &V::lowest() {
+                    Self::none()
+                // Complement of "v <= _" is "_ < v"
+                } else {
+                    Self::strictly_lower_than(v.clone())
+                }
+            }
+
+            // First high bound is not +∞
+            Some((v1, Some(v2))) => {
+                if v1 == &V::lowest() {
+                    Self {
+                        segments: Self::negate_segments(v2.clone(), &self.segments[1..]),
+                    }
+                } else {
+                    Self {
+                        segments: Self::negate_segments(V::lowest(), &self.segments),
+                    }
+                }
+            }
+        }
+    }
+
+    /// Compute the intersection of two sets of versions.
+    fn intersection(&self, other: &Self) -> Self {
+        Self {
+            segments: Self::intersection_segments(&self.segments, &other.segments),
+        }
+    }
+}
+
+// Range building blocks.
+impl<V: Version> Range<V> {
+    /// Set of all possible versions.
+    pub fn any() -> Self {
+        Self::higher_than(V::lowest())
     }
 
     /// Set of all versions higher or equal to some version.
@@ -140,20 +234,6 @@ impl<V: Version> Range<V> {
         complement_segments
     }
 
-    // Union and intersection ##################################################
-
-    /// Compute the union of two sets of versions.
-    pub fn union(&self, other: &Self) -> Self {
-        (self.negate().intersection(&other.negate())).negate()
-    }
-
-    /// Compute the intersection of two sets of versions.
-    pub fn intersection(&self, other: &Self) -> Self {
-        Self {
-            segments: Self::intersection_segments(&self.segments, &other.segments),
-        }
-    }
-
     /// Helper function performing intersection of two interval segments.
     fn intersection_segments(s1: &[Interval<V>], s2: &[Interval<V>]) -> Vec<Interval<V>> {
         let mut segments = Vec::with_capacity(s1.len().min(s2.len()));
@@ -237,23 +317,6 @@ impl<V: Version> Range<V> {
 
 // Other useful functions.
 impl<V: Version> Range<V> {
-    /// Check if a range contains a given version.
-    pub fn contains(&self, version: &V) -> bool {
-        for (v1, some_v2) in self.segments.iter() {
-            match some_v2 {
-                None => return v1 <= version,
-                Some(v2) => {
-                    if version < v1 {
-                        return false;
-                    } else if version < v2 {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    }
-
     /// Return the lowest version in the range (if there is one).
     pub fn lowest_version(&self) -> Option<V> {
         self.segments

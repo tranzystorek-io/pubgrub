@@ -4,16 +4,15 @@
 
 use thiserror::Error;
 
-use crate::package::Package;
 use crate::report::DerivationTree;
-use crate::version::Version;
+use crate::{package::Package, range::RangeSet};
 
 /// Errors that may occur while solving dependencies.
 #[derive(Error, Debug)]
-pub enum PubGrubError<P: Package, V: Version> {
+pub enum PubGrubError<P: Package, R: RangeSet> {
     /// There is no solution for this set of dependencies.
     #[error("No solution")]
-    NoSolution(DerivationTree<P, V>),
+    NoSolution(DerivationTree<P, R>),
 
     /// Error arising when the implementer of
     /// [DependencyProvider](crate::solver::DependencyProvider)
@@ -24,7 +23,7 @@ pub enum PubGrubError<P: Package, V: Version> {
         /// Package whose dependencies we want.
         package: P,
         /// Version of the package for which we want the dependencies.
-        version: V,
+        version: R::VERSION,
         /// Error raised by the implementer of
         /// [DependencyProvider](crate::solver::DependencyProvider).
         source: Box<dyn std::error::Error>,
@@ -40,7 +39,7 @@ pub enum PubGrubError<P: Package, V: Version> {
         /// Package whose dependencies we want.
         package: P,
         /// Version of the package for which we want the dependencies.
-        version: V,
+        version: R::VERSION,
         /// The dependent package that requires us to pick from the empty set.
         dependent: P,
     },
@@ -55,7 +54,7 @@ pub enum PubGrubError<P: Package, V: Version> {
         /// Package whose dependencies we want.
         package: P,
         /// Version of the package for which we want the dependencies.
-        version: V,
+        version: R::VERSION,
     },
 
     /// Error arising when the implementer of

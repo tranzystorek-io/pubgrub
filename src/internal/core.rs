@@ -22,8 +22,7 @@ pub struct State<P: Package, V: Version> {
     root_package: P,
     root_version: V,
 
-    /// TODO: remove pub.
-    pub incompatibilities: Rc<Vec<IncompId<P, V>>>,
+    incompatibilities: Rc<Vec<IncompId<P, V>>>,
 
     /// Partial solution.
     /// TODO: remove pub.

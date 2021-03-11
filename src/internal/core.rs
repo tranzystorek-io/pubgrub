@@ -23,6 +23,8 @@ pub struct State<P: Package, V: Version> {
     root_version: V,
 
     incompatibilities: Vec<IncompId<P, V>>,
+    /// all indexes in incompatibilities less then are Contradicted
+    contradicted_idx: usize,
 
     /// Partial solution.
     /// TODO: remove pub.
@@ -49,6 +51,7 @@ impl<P: Package, V: Version> State<P, V> {
             root_package,
             root_version,
             incompatibilities: vec![not_root_id],
+            contradicted_idx: 0,
             partial_solution: PartialSolution::empty(),
             incompatibility_store,
             unit_propagation_buffer: vec![],
@@ -94,7 +97,7 @@ impl<P: Package, V: Version> State<P, V> {
         while let Some(current_package) = self.unit_propagation_buffer.pop() {
             // Iterate over incompatibilities in reverse order
             // to evaluate first the newest incompatibilities.
-            for incompat_idx in (0..self.incompatibilities.len()).rev() {
+            for incompat_idx in (self.contradicted_idx..self.incompatibilities.len()).rev() {
                 let incompat_id = self.incompatibilities[incompat_idx];
                 let current_incompat = &self.incompatibility_store[incompat_id];
                 // We only care about that incompatibility if it contains the current package.
@@ -123,6 +126,11 @@ impl<P: Package, V: Version> State<P, V> {
                             incompat_id,
                             &self.incompatibility_store,
                         );
+                    }
+                    Relation::Contradicted(_) => {
+                        if self.contradicted_idx == incompat_idx {
+                            self.contradicted_idx += 1;
+                        }
                     }
                     _ => {}
                 }
@@ -199,6 +207,7 @@ impl<P: Package, V: Version> State<P, V> {
         if incompat_changed {
             self.merge_into(incompat);
         }
+        self.contradicted_idx = 0;
     }
 
     /// Add this incompatibility into the set of all incompatibilities.

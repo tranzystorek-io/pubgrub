@@ -98,6 +98,9 @@ impl<P: Package, V: Version> State<P, V> {
             // Iterate over incompatibilities in reverse order
             // to evaluate first the newest incompatibilities.
             for incompat_idx in (self.contradicted_idx..self.incompatibilities.len()).rev() {
+                if incompat_idx < self.contradicted_idx {
+                    continue;
+                }
                 let incompat_id = self.incompatibilities[incompat_idx];
                 let current_incompat = &self.incompatibility_store[incompat_id];
                 // We only care about that incompatibility if it contains the current package.
@@ -117,6 +120,7 @@ impl<P: Package, V: Version> State<P, V> {
                             root_cause,
                             &self.incompatibility_store,
                         );
+                        self.update_contradicted_idx();
                     }
                     Relation::AlmostSatisfied(package_almost) => {
                         self.unit_propagation_buffer.push(package_almost.clone());
@@ -126,6 +130,7 @@ impl<P: Package, V: Version> State<P, V> {
                             incompat_id,
                             &self.incompatibility_store,
                         );
+                        self.update_contradicted_idx();
                     }
                     Relation::Contradicted(_) => {
                         if self.contradicted_idx == incompat_idx {
@@ -208,6 +213,9 @@ impl<P: Package, V: Version> State<P, V> {
             self.merge_into(incompat);
         }
         self.contradicted_idx = 0;
+    }
+
+    fn update_contradicted_idx(&mut self) {
         for incompat_idx in self.contradicted_idx..self.incompatibilities.len() {
             let incompat_id = self.incompatibilities[incompat_idx];
             let current_incompat = &self.incompatibility_store[incompat_id];

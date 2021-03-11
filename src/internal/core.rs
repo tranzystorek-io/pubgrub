@@ -3,7 +3,7 @@
 //! Core model and functions
 //! to write a functional PubGrub algorithm.
 
-use std::{collections::HashSet as Set, rc::Rc};
+use std::collections::HashSet as Set;
 
 use crate::error::PubGrubError;
 use crate::internal::arena::Arena;
@@ -22,7 +22,7 @@ pub struct State<P: Package, V: Version> {
     root_package: P,
     root_version: V,
 
-    incompatibilities: Rc<Vec<IncompId<P, V>>>,
+    incompatibilities: Vec<IncompId<P, V>>,
 
     /// Partial solution.
     /// TODO: remove pub.
@@ -48,7 +48,7 @@ impl<P: Package, V: Version> State<P, V> {
         Self {
             root_package,
             root_version,
-            incompatibilities: Rc::new(vec![not_root_id]),
+            incompatibilities: vec![not_root_id],
             partial_solution: PartialSolution::empty(),
             incompatibility_store,
             unit_propagation_buffer: vec![],
@@ -59,7 +59,7 @@ impl<P: Package, V: Version> State<P, V> {
     pub fn add_incompatibility(&mut self, incompat: Incompatibility<P, V>) {
         Incompatibility::merge_into(
             self.incompatibility_store.alloc(incompat),
-            Rc::make_mut(&mut self.incompatibilities),
+            &mut self.incompatibilities,
         );
     }
 
@@ -77,9 +77,8 @@ impl<P: Package, V: Version> State<P, V> {
                 Incompatibility::from_dependency(package.clone(), version.clone(), dep)
             }));
         // Merge the newly created incompatibilities with the older ones.
-        let incompatibilities = Rc::make_mut(&mut self.incompatibilities);
         for id in IncompId::range_to_iter(new_incompats_id_range.clone()) {
-            Incompatibility::merge_into(id, incompatibilities);
+            Incompatibility::merge_into(id, &mut self.incompatibilities);
         }
         new_incompats_id_range
     }
@@ -97,7 +96,8 @@ impl<P: Package, V: Version> State<P, V> {
         while let Some(current_package) = self.unit_propagation_buffer.pop() {
             // Iterate over incompatibilities in reverse order
             // to evaluate first the newest incompatibilities.
-            for &incompat_id in Rc::clone(&self.incompatibilities).iter().rev() {
+            for incompat_idx in (0..self.incompatibilities.len()).rev() {
+                let incompat_id = self.incompatibilities[incompat_idx];
                 let current_incompat = &self.incompatibility_store[incompat_id];
                 // We only care about that incompatibility if it contains the current package.
                 if current_incompat.get(&current_package).is_none() {
@@ -199,7 +199,7 @@ impl<P: Package, V: Version> State<P, V> {
         self.partial_solution
             .backtrack(decision_level, &self.incompatibility_store);
         if incompat_changed {
-            Incompatibility::merge_into(incompat, Rc::make_mut(&mut self.incompatibilities));
+            Incompatibility::merge_into(incompat, &mut self.incompatibilities);
         }
     }
 

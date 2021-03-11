@@ -97,48 +97,54 @@ impl<P: Package, V: Version> State<P, V> {
         while let Some(current_package) = self.unit_propagation_buffer.pop() {
             // Iterate over incompatibilities in reverse order
             // to evaluate first the newest incompatibilities.
-            for incompat_idx in (self.contradicted_idx..self.incompatibilities.len()).rev() {
-                if incompat_idx < self.contradicted_idx {
-                    continue;
-                }
+            let mut incompat_idx = self.incompatibilities.len() - 1;
+            loop {
                 let incompat_id = self.incompatibilities[incompat_idx];
                 let current_incompat = &self.incompatibility_store[incompat_id];
                 // We only care about that incompatibility if it contains the current package.
-                if current_incompat.get(&current_package).is_none() {
-                    continue;
-                }
-                match self.partial_solution.relation(current_incompat) {
-                    // If the partial solution satisfies the incompatibility
-                    // we must perform conflict resolution.
-                    Relation::Satisfied => {
-                        let (package_almost, root_cause) = self.conflict_resolution(incompat_id)?;
-                        self.unit_propagation_buffer.clear();
-                        self.unit_propagation_buffer.push(package_almost.clone());
-                        // Add to the partial solution with incompat as cause.
-                        self.partial_solution.add_derivation(
-                            package_almost,
-                            root_cause,
-                            &self.incompatibility_store,
-                        );
-                        self.update_contradicted_idx();
-                    }
-                    Relation::AlmostSatisfied(package_almost) => {
-                        self.unit_propagation_buffer.push(package_almost.clone());
-                        // Add (not term) to the partial solution with incompat as cause.
-                        self.partial_solution.add_derivation(
-                            package_almost,
-                            incompat_id,
-                            &self.incompatibility_store,
-                        );
-                        self.update_contradicted_idx();
-                    }
-                    Relation::Contradicted(_) => {
-                        if self.contradicted_idx == incompat_idx {
-                            self.contradicted_idx += 1;
+                if current_incompat.get(&current_package).is_some() {
+                    match self.partial_solution.relation(current_incompat) {
+                        // If the partial solution satisfies the incompatibility
+                        // we must perform conflict resolution.
+                        Relation::Satisfied => {
+                            let (package_almost, root_cause) =
+                                self.conflict_resolution(incompat_id)?;
+                            self.unit_propagation_buffer.clear();
+                            self.unit_propagation_buffer.push(package_almost.clone());
+                            // Add to the partial solution with incompat as cause.
+                            self.partial_solution.add_derivation(
+                                package_almost,
+                                root_cause,
+                                &self.incompatibility_store,
+                            );
+                            self.update_contradicted_idx();
                         }
+                        Relation::AlmostSatisfied(package_almost) => {
+                            self.unit_propagation_buffer.push(package_almost.clone());
+                            // Add (not term) to the partial solution with incompat as cause.
+                            self.partial_solution.add_derivation(
+                                package_almost,
+                                incompat_id,
+                                &self.incompatibility_store,
+                            );
+                        }
+                        Relation::Contradicted(_) => {
+                            if self.contradicted_idx < incompat_idx {
+                                self.incompatibilities
+                                    .swap(incompat_idx, self.contradicted_idx);
+                                incompat_idx += 1; // we still need to check the new one at incompat_idx
+                                self.contradicted_idx += 1; // but we have already checked the one at contradicted_idx
+                            } else if self.contradicted_idx == incompat_idx {
+                                self.contradicted_idx += 1;
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
+                if incompat_idx <= self.contradicted_idx {
+                    break;
+                }
+                incompat_idx -= 1;
             }
         }
         // If there are no more changed packages, unit propagation is done.

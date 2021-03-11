@@ -208,6 +208,19 @@ impl<P: Package, V: Version> State<P, V> {
             self.merge_into(incompat);
         }
         self.contradicted_idx = 0;
+        for incompat_idx in self.contradicted_idx..self.incompatibilities.len() {
+            let incompat_id = self.incompatibilities[incompat_idx];
+            let current_incompat = &self.incompatibility_store[incompat_id];
+            match self.partial_solution.relation(current_incompat) {
+                Relation::Contradicted(_) => {
+                    debug_assert_eq!(self.contradicted_idx, incompat_idx);
+                    self.contradicted_idx += 1;
+                }
+                _ => {
+                    break;
+                }
+            }
+        }
     }
 
     /// Add this incompatibility into the set of all incompatibilities.

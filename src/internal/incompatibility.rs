@@ -41,7 +41,7 @@ pub type IncompId<P, V> = Id<Incompatibility<P, V>>;
 #[derive(Debug, Clone)]
 enum Kind<P: Package, V: Version> {
     /// Initial incompatibility aiming at picking the root package for the first decision.
-    NotRoot(P, V),
+    NotRoot,
     /// There are no versions in the given range for this package.
     NoVersions,
     /// Dependencies of the package are unavailable for versions in that range.
@@ -76,11 +76,8 @@ impl<P: Package, V: Version> Incompatibility<P, V> {
     /// Create the initial "not Root" incompatibility.
     pub fn not_root(package: P, version: V) -> Self {
         Self {
-            package_terms: SmallMap::One([(
-                package.clone(),
-                Term::Negative(Range::exact(version.clone())),
-            )]),
-            kind: Kind::NotRoot(package, version),
+            package_terms: SmallMap::One([(package, Term::Negative(Range::exact(version)))]),
+            kind: Kind::NotRoot,
         }
     }
 
@@ -238,11 +235,25 @@ impl<P: Package, V: Version> Incompatibility<P, V> {
         self_id: Id<Self>,
         shared_ids: &Set<Id<Self>>,
         store: &Arena<Self>,
+        root_package: &P,
+        root_version: &V,
     ) -> DerivationTree<P, V> {
         match &store[self_id].kind {
             Kind::DerivedFrom(id1, id2) => {
-                let cause1 = Self::build_derivation_tree(*id1, shared_ids, store);
-                let cause2 = Self::build_derivation_tree(*id2, shared_ids, store);
+                let cause1 = Self::build_derivation_tree(
+                    *id1,
+                    shared_ids,
+                    store,
+                    root_package,
+                    root_version,
+                );
+                let cause2 = Self::build_derivation_tree(
+                    *id2,
+                    shared_ids,
+                    store,
+                    root_package,
+                    root_version,
+                );
                 let derived = Derived {
                     terms: store[self_id].package_terms.as_map(),
                     shared_id: shared_ids.get(&self_id).map(|id| id.into_raw()),
@@ -251,9 +262,10 @@ impl<P: Package, V: Version> Incompatibility<P, V> {
                 };
                 DerivationTree::Derived(derived)
             }
-            Kind::NotRoot(package, version) => {
-                DerivationTree::External(External::NotRoot(package.clone(), version.clone()))
-            }
+            Kind::NotRoot => DerivationTree::External(External::NotRoot(
+                root_package.clone(),
+                root_version.clone(),
+            )),
             Kind::NoVersions => match &store[self_id].package_terms {
                 SmallMap::One([(package, Term::Positive(range))]) => {
                     DerivationTree::External(External::NoVersions(package.clone(), range.clone()))

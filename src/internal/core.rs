@@ -212,7 +212,13 @@ impl<P: Package, V: Version> State<P, V> {
 
     fn build_derivation_tree(&self, incompat: IncompId<P, V>) -> DerivationTree<P, V> {
         let shared_ids = self.find_shared_ids(incompat);
-        Incompatibility::build_derivation_tree(incompat, &shared_ids, &self.incompatibility_store)
+        Incompatibility::build_derivation_tree(
+            incompat,
+            &shared_ids,
+            &self.incompatibility_store,
+            &self.root_package,
+            &self.root_version,
+        )
     }
 
     fn find_shared_ids(&self, incompat: IncompId<P, V>) -> Set<IncompId<P, V>> {

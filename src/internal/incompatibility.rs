@@ -104,11 +104,10 @@ impl<P: Package, V: Version> Incompatibility<P, V> {
 
     /// Build an incompatibility from a given dependency.
     pub fn from_dependency(package: P, version: V, dep: (&P, &Range<V>)) -> Self {
-        let range1 = Range::exact(version.clone());
         let (p2, range2) = dep;
         Self {
             package_terms: SmallMap::Two([
-                (package.clone(), Term::Positive(range1)),
+                (package, Term::Positive(Range::exact(version))),
                 (p2.clone(), Term::Negative(range2.clone())),
             ]),
             kind: Kind::FromDependency,
@@ -130,7 +129,7 @@ impl<P: Package, V: Version> Incompatibility<P, V> {
     /// (provided that no other version of foo exists between 1.0.0 and 2.0.0).
     /// We could collapse them into { foo (1.0.0 ∪ 1.1.0), not bar ^1.0.0 }
     /// without having to check the existence of other versions though.
-    /// And it would even keep the same [Kind]: [FromDependencyOf](Kind::FromDependencyOf) foo.
+    /// And it would even keep the same [Kind]: [FromDependencyOf](Kind::FromDependency) foo.
     ///
     /// Here we do the simple stupid thing of just growing the Vec.
     /// TODO: improve this.
